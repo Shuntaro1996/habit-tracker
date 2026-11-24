@@ -3,6 +3,13 @@ import type { AppData, Habit, Records } from './types';
 
 const APP_ID = 'habit-tracker';
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
+/** 習慣のIDとして受け付ける形（英数字・_・- だけ） */
+const HABIT_ID = /^[A-Za-z0-9_-]{1,64}$/;
+/** JavaScript で特別な意味を持つ名前は、IDとして使わせない */
+const RESERVED_IDS = new Set(['__proto__', 'constructor', 'prototype']);
+/** これより大きいファイルはバックアップではないとみなす（固まるのを防ぐ） */
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_HABITS = 200;
 
 /** バックアップファイルの中身 */
 type BackupFile = {
@@ -79,6 +86,7 @@ export function pickBackupFile(): Promise<string | null> {
     input.addEventListener('change', () => {
       const file = input.files?.[0];
       if (!file) return finish(null);
+      if (file.size > MAX_FILE_BYTES) return finish('');
       file.text().then(finish, () => finish(''));
     });
     input.addEventListener('cancel', () => finish(null));
@@ -93,7 +101,7 @@ function isObject(v: unknown): v is Record<string, unknown> {
 function parseHabit(v: unknown): Habit | null {
   if (!isObject(v)) return null;
   const { id, name, color, goal, createdAt } = v;
-  if (typeof id !== 'string' || !id) return null;
+  if (typeof id !== 'string' || !HABIT_ID.test(id) || RESERVED_IDS.has(id)) return null;
   if (typeof name !== 'string' || !name.trim()) return null;
   if (typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color)) return null;
   if (typeof goal !== 'number' || !Number.isFinite(goal)) return null;
@@ -116,7 +124,7 @@ export function parseBackup(text: string): ParsedBackup | null {
   }
   if (!isObject(json) || json.app !== APP_ID || !isObject(json.data)) return null;
   const { habits: rawHabits, records: rawRecords } = json.data;
-  if (!Array.isArray(rawHabits)) return null;
+  if (!Array.isArray(rawHabits) || rawHabits.length > MAX_HABITS) return null;
 
   const habits: Habit[] = [];
   for (const raw of rawHabits) {
@@ -130,6 +138,7 @@ export function parseBackup(text: string): ParsedBackup | null {
   let checkCount = 0;
   if (isObject(rawRecords)) {
     for (const habit of habits) {
+      if (!Object.prototype.hasOwnProperty.call(rawRecords, habit.id)) continue;
       const days = rawRecords[habit.id];
       if (!isObject(days)) continue;
       const clean: Record<string, true> = {};
