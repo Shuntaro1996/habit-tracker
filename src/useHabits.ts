@@ -61,5 +61,10 @@ export function useHabits() {
     });
   }, []);
 
-  return { ...data, ready, addHabit, updateHabit, deleteHabit, toggle };
+  /** バックアップから読み込んだデータで、今の習慣と記録をすべて置き換える */
+  const replaceAll = useCallback((next: AppData) => {
+    setData(next);
+  }, []);
+
+  return { ...data, ready, addHabit, updateHabit, deleteHabit, toggle, replaceAll };
 }

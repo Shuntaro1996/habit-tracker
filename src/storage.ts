@@ -32,6 +32,25 @@ export function requestPersistentStorage(): void {
   nav?.storage?.persist?.().catch(() => {});
 }
 
+const LAST_BACKUP_KEY = 'habit-tracker/last-backup';
+
+/** 最後にバックアップを書き出した日時（ISO 文字列）。まだなら null */
+export async function loadLastBackup(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(LAST_BACKUP_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export async function saveLastBackup(iso: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(LAST_BACKUP_KEY, iso);
+  } catch {
+    // 日付が残せなくても、バックアップ自体はできている
+  }
+}
+
 export async function saveData(data: AppData): Promise<void> {
   try {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));

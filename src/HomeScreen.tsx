@@ -1,7 +1,17 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  AppState,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackupSheet } from './components/BackupSheet';
 import { DayLabels } from './components/DayLabels';
 import { HabitCard } from './components/HabitCard';
 import { HabitEditor } from './components/HabitEditor';
@@ -9,6 +19,7 @@ import { SummaryBar } from './components/SummaryBar';
 import { WeekHeader } from './components/WeekHeader';
 import { addDays, startOfWeek, toKey, weekDays } from './dates';
 import { successFeedback, tapFeedback } from './haptics';
+import { loadLastBackup, saveLastBackup } from './storage';
 import { colors, HABIT_COLORS, LIST_PAD, MAX_WIDTH } from './theme';
 import type { Habit } from './types';
 import { type HabitInput, useHabits } from './useHabits';
@@ -20,6 +31,9 @@ const SUGGESTIONS: HabitInput[] = [
   { name: '早起き', goal: 5, color: HABIT_COLORS[2] },
   { name: '日記', goal: 7, color: HABIT_COLORS[4] },
 ];
+
+/** バックアップはブラウザ版（ホーム画面に追加したアプリ）だけで使える */
+const CAN_BACKUP = Platform.OS === 'web';
 
 /** 編集シートの状態。habit が null なら新規追加 */
 type EditorState = { habit: Habit | null } | null;
@@ -37,10 +51,17 @@ function useToday(): Date {
 }
 
 export default function HomeScreen() {
-  const { habits, records, ready, addHabit, updateHabit, deleteHabit, toggle } = useHabits();
+  const { habits, records, ready, addHabit, updateHabit, deleteHabit, toggle, replaceAll } =
+    useHabits();
   const today = useToday();
   const [offset, setOffset] = useState(0);
   const [editor, setEditor] = useState<EditorState>(null);
+  const [backupOpen, setBackupOpen] = useState(false);
+  const [lastBackup, setLastBackup] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (CAN_BACKUP) loadLastBackup().then(setLastBackup);
+  }, []);
 
   const todayKey = toKey(today);
   const weekStart = addDays(startOfWeek(today), offset * 7);
@@ -94,7 +115,11 @@ export default function HomeScreen() {
 
         <ScrollView contentContainerStyle={styles.list}>
           {habits.length === 0 ? (
-            <EmptyState onPick={addHabit} onCustom={() => setEditor({ habit: null })} />
+            <EmptyState
+              onPick={addHabit}
+              onCustom={() => setEditor({ habit: null })}
+              onRestore={CAN_BACKUP ? () => setBackupOpen(true) : undefined}
+            />
           ) : (
             <>
               {habits.map((h, i) => (
@@ -117,10 +142,40 @@ export default function HomeScreen() {
                 <Text style={styles.addButtonText}>＋ 習慣を追加</Text>
               </Pressable>
               <Text style={styles.hint}>丸をタップして記録 ・ 名前をタップで編集</Text>
+              {CAN_BACKUP && (
+                <Pressable
+                  onPress={() => setBackupOpen(true)}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.backupLink, pressed && styles.backupLinkPressed]}
+                >
+                  <Text style={styles.backupLinkText}>バックアップ</Text>
+                  <Text style={styles.backupLinkSub}>
+                    {lastBackup ? `前回 ${formatShortDate(lastBackup)}` : 'まだしていません'}
+                  </Text>
+                </Pressable>
+              )}
             </>
           )}
         </ScrollView>
       </View>
+
+      {backupOpen && (
+        <BackupSheet
+          data={{ version: 1, habits, records }}
+          lastBackup={lastBackup}
+          onExported={(iso) => {
+            setLastBackup(iso);
+            saveLastBackup(iso);
+          }}
+          onRestore={(data) => {
+            replaceAll(data);
+            setOffset(0);
+            setBackupOpen(false);
+            successFeedback();
+          }}
+          onClose={() => setBackupOpen(false)}
+        />
+      )}
 
       {editor && (
         <HabitEditor
@@ -146,12 +201,20 @@ export default function HomeScreen() {
   );
 }
 
+function formatShortDate(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
 function EmptyState({
   onPick,
   onCustom,
+  onRestore,
 }: {
   onPick: (input: HabitInput) => void;
   onCustom: () => void;
+  /** バックアップから戻す（使えない環境では渡さない） */
+  onRestore?: () => void;
 }) {
   return (
     <View style={styles.empty}>
@@ -181,6 +244,12 @@ function EmptyState({
       <Pressable onPress={onCustom} accessibilityRole="button" style={styles.emptyAddButton}>
         <Text style={styles.emptyAddText}>自分で追加する</Text>
       </Pressable>
+
+      {onRestore && (
+        <Pressable onPress={onRestore} accessibilityRole="button" style={styles.restoreLink}>
+          <Text style={styles.restoreLinkText}>バックアップから戻す</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -226,6 +295,38 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 12,
     color: colors.faint,
+  },
+  backupLink: {
+    marginTop: 20,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+  },
+  backupLinkPressed: {
+    backgroundColor: colors.border,
+  },
+  backupLinkText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  backupLinkSub: {
+    fontSize: 12,
+    color: colors.faint,
+  },
+  restoreLink: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  restoreLinkText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
   },
   empty: {
     alignItems: 'center',
