@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>%WEB_TITLE%</title>
+    <meta name="description" content="続けたい習慣を1週間ごとに記録するアプリ" />
+    <meta name="theme-color" content="#F4F5F9" />
+
+    <!-- スマホの「ホーム画面に追加」で、アプリのように開くための設定 -->
+    <!-- GitHub Pages では /habit-tracker/ の下に置かれるので、どれも相対パスで書く -->
+    <link rel="manifest" href="manifest.json" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="習慣トラッカー" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+      /* 丸を素早くタップしても拡大しない・タップ時の灰色の影を出さない */
+      html {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        background-color: #f4f5f9;
+      }
+    </style>
+
+    <script>
+      // ネットにつながっていなくても開けるようにする。
+      // sw.js は `npm run build:web` で作られるので、開発中（ファイルがないとき）は登録しない。
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          fetch('sw.js', { method: 'HEAD' })
+            .then(function (res) {
+              var type = res.headers.get('content-type') || '';
+              if (res.ok && type.indexOf('javascript') !== -1) {
+                return navigator.serviceWorker.register('sw.js');
+              }
+            })
+            .catch(function () {});
+        });
+      }
+    </script>
+  </head>
+
+  <body>
+    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
+    <noscript> You need to enable JavaScript to run this app. </noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+  </body>
+</html>
